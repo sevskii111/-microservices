@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  web:
+    build: ./frontend
+    ports:
+      - "3000:80" # nginx listen on 80
+    depends_on:
+      - auth-service
+      - goods-service
+    command: [ nginx-debug, '-g', 'daemon off;' ]
+  db:
+    image: mariadb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      timeout: 5s
+      retries: 10
+    volumes:
+      - ./initDB.sql:/tmp/initDB.sql
+    command: mysqld --init-file="/tmp/initDB.sql"
+    ports:
+      - "3307:3306"
+  auth-service:
+    build: https://github.com/sevskii111/microservices-auth.git
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      [
+        "/usr/local/bin/app",
+        "--secret=${SECRET}",
+        "--addr=:8000",
+        "--dsn=root:${MYSQL_ROOT_PASSWORD}@tcp(db:3306)/auth?parseTime=true"
+      ]
+  goods-service:
+    build: https://github.com/sevskii111/microservices-goods.git
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      [
+        "/usr/local/bin/app",
+        "--secret=${SECRET}",
+        "--addr=:8000",
+        "--dsn=root:${MYSQL_ROOT_PASSWORD}@tcp(db:3306)/goods?parseTime=true"
+      ]
